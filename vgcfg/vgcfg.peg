@@ -1,0 +1,36 @@
+
+package vgcfg
+
+# parser declaration
+
+type parser Peg {
+    baseParser
+}
+
+# Hierarchical syntax
+CONFIG
+    <- (VARIABLE / GROUP / SPACE / COMMENT)+
+
+VARIABLE
+    <- VARNAME ' = ' (STRING / INTEGER / LIST) { p.AddVariable() }
+ 
+VARNAME
+    <- < [a-zA-Z0-9_.+\-]+ >    { p.SetVarName(buffer[begin:end]) }
+
+GROUP
+    <- VARNAME SPACE "{"    { p.BeginGroup() }
+        (VARIABLE / GROUP / SPACE / COMMENT)+ 
+    "}"                     { p.EndGroup() }
+
+STRING
+    <- '\"' < (!["\\\n\r] .)* > '\"'  { p.AddStringValue(buffer[begin:end]) }
+
+INTEGER
+    <- < [0-9]+ >              { p.AddIntegerValue(buffer[begin:end]) }
+
+LIST
+    <- ('[' SPACE* ']' / '[' SPACE? (STRING / INTEGER ) (', ' / (STRING / INTEGER))* SPACE? ']') { p.SetIsList(true) }
+
+SPACE       <- ([ \t\n])+
+COMMENT     <- '#' < (![\r\n] .)* > [\r\n]+ { p.PrintComment(buffer[begin:end]) }
+
