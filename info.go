@@ -14,6 +14,7 @@ func showInfo(path string, verbose bool) error {
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 
 	var buf [SchemeV1HeaderLength]byte
 	if _, err := io.ReadFull(f, buf[:]); err != nil {
