@@ -8,7 +8,7 @@ import (
 )
 
 func setupSendCommand(rootCmd *cobra.Command) {
-	var vgname, lvname, srcname string
+	var vgname, lvname, header, srcname, output string
 
 	cmd := &cobra.Command{
 		Use:   "send",
@@ -26,7 +26,7 @@ func setupSendCommand(rootCmd *cobra.Command) {
 				os.Exit(2)
 			}
 
-			if err := sender.Run(); err != nil {
+			if err := sender.Run(header, output); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(3)
 			}
@@ -37,25 +37,32 @@ func setupSendCommand(rootCmd *cobra.Command) {
 
 	cmd.Flags().StringVarP(&vgname, "vg", "v", "", "volume group")
 	cmd.Flags().StringVarP(&lvname, "lv", "l", "", "logical volume")
+	cmd.Flags().StringVarP(&header, "head", "", "", "header info file")
+	cmd.Flags().StringVarP(&output, "output", "o", "", "output file")
 	cmd.Flags().StringVarP(&srcname, "incremental", "i", "", "source logical volume")
 
 	rootCmd.AddCommand(cmd)
 }
 
 func setupRecvCommand(rootCmd *cobra.Command) {
-	var vgname, poolname, lvname string
+	var vgname, poolname, lvname, input string
 
 	cmd := &cobra.Command{
 		Use:   "recv",
 		Short: "create or update thin logcial volume with contents in standard input",
 		Run: func(cmd *cobra.Command, args []string) {
-			if len(vgname) == 0 || len(poolname) == 0 || len(lvname) == 0 {
+			if len(vgname) == 0 || len(poolname) == 0 || len(lvname) == 0 || len(input) == 0 {
 				fmt.Fprintln(os.Stderr, "volume group, thin pool and logical volume must be provided")
 				cmd.Usage()
 				os.Exit(-1)
 			}
-
-			recver, err := newStreamRecver(vgname, poolname, lvname, os.Stdin)
+			f, err := os.Open(input)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			defer f.Close()
+			recver, err := newStreamRecver(vgname, poolname, lvname, f)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(2)
@@ -71,6 +78,7 @@ func setupRecvCommand(rootCmd *cobra.Command) {
 	}
 
 	cmd.Flags().StringVarP(&vgname, "vg", "v", "", "volume group")
+	cmd.Flags().StringVarP(&input, "input", "i", "", "input volume file")
 	cmd.Flags().StringVarP(&poolname, "pool", "p", "", "thin pool")
 	cmd.Flags().StringVarP(&lvname, "lv", "l", "", "logical volume")
 
@@ -125,7 +133,7 @@ func main() {
 			os.Exit(-1)
 		},
 	}
-
+	//os.Args = strings.Split("lvbackup send -v vg001 -l sp001 > sp.out", " ")
 	setupSendCommand(rootCmd)
 	setupRecvCommand(rootCmd)
 	setupInfoCommand(rootCmd)

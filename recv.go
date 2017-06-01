@@ -1,19 +1,22 @@
 package main
 
 import (
-	"bytes"
 	"crypto/md5"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash"
 	"io"
 	"os"
+	"strconv"
 
-	"github.com/yangjian/lvbackup/lvmutil"
-	"github.com/yangjian/lvbackup/vgcfg"
+	"hyperblock/lvbackup/lvmutil"
+	"hyperblock/lvbackup/vgcfg"
 
 	"github.com/ncw/directio"
+
+	"strings"
+
+	"bufio"
 )
 
 type streamRecver struct {
@@ -94,57 +97,95 @@ func (sr *streamRecver) prepare() error {
 }
 
 func (sr *streamRecver) recvNextStream() error {
-	if err := sr.prepare(); err != nil {
-		return err
-	}
+	// if err := sr.prepare(); err != nil {
+	// 	return err
+	// }
 
 	devpath := lvmutil.LvDevicePath(sr.vgname, sr.lvname)
+	fmt.Printf("open devpath: %s\n", devpath)
 	devFile, err := directio.OpenFile(devpath, os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
-	defer devFile.Close()
+	//defer devFile.Close()
+	fmt.Println("open dev done.")
 
-	n := 8 + sr.header.BlockSize
-	b := make([]byte, n+md5.Size)
-
-	buf := directio.AlignedBlock(int(sr.header.BlockSize))
-
-	for i := uint64(0); i < sr.header.BlockCount; i++ {
-		if _, err := io.ReadFull(sr.r, b); err != nil {
+	bfRd := bufio.NewReader(sr.r)
+	//	subHead := make([]byte, 18)
+	for {
+		//	if _, err := io.ReadFull(sr.r, subHead); err != nil {
+		line, err := bfRd.ReadBytes('\n')
+		//fmt.Println(string(subHead))
+		if err != nil {
+			fmt.Println(err.Error())
 			return err
 		}
+		subHead := string(line[:len(line)-1])
 
-		sr.h.Reset()
-		sr.h.Write(b[:n])
-		if !bytes.Equal(sr.h.Sum(nil), b[n:n+md5.Size]) {
-			return fmt.Errorf("check sum mismatch for %dst block", i)
+		args := strings.Split(subHead, " ")
+		if len(args) != 2 {
+			break
 		}
+		offset, _ := strconv.ParseInt(args[0], 16, 64)
+		length, _ := strconv.ParseInt(args[1], 16, 64)
+		length <<= 9
+		offset <<= 9
+		fmt.Println(offset, length)
+		//		sr.h.Reset()
+		//		sr.h.Write(b[:n])
+		tmpbuf := make([]byte, length)
+		buf := make([]byte, length)
+		var cnt int64
+		for {
+			n, err := bfRd.Read(tmpbuf)
+			if err != nil {
+				return err
+			}
+			copy(buf[cnt:], tmpbuf)
+			cnt += int64(n)
+			if cnt >= length {
+				break
+			}
+			tmpbuf = make([]byte, length-cnt)
+		}
+		//	newline := make([]byte, 1)
+		//io.ReadFull(sr.r, newline)
+		// if !bytes.Equal(sr.h.Sum(nil), b[n:n+md5.Size]) {
+		// 	return fmt.Errorf("check sum mismatch for %dst block", i)
+		// }
 
-		index := int64(binary.BigEndian.Uint64(b))
-		copy(buf, b[8:n])
+		// index := int64(binary.BigEndian.Uint64(b))
+		// copy(buf, b[8:n])
 
-		if _, err := devFile.Seek(int64(sr.header.BlockSize)*index, os.SEEK_SET); err != nil {
+		//	if _, err := devFile.Seek(int64(sr.header.BlockSize)*index, os.SEEK_SET); err != nil {
+		if _, err := devFile.Seek(offset, os.SEEK_SET); err != nil {
+			fmt.Println("seek error.")
 			return err
 		}
 
 		if _, err := devFile.Write(buf); err != nil {
+			fmt.Println("dev write error.")
 			return err
 		}
+		fmt.Println("done")
+		//	bfRd.ReadLine()
+		bfRd.ReadBytes('\n')
 	}
 
-	sr.prevUUID = string(sr.header.VolumeUUID[:])
+	//	sr.prevUUID = string(sr.header.VolumeUUID[:])
 	return nil
 }
 
 func (sr *streamRecver) Run() error {
 	var err error
-	for {
-		err = sr.recvNextStream()
-		if err != nil {
-			break
-		}
+	//bfRd := bufio.NewReader(sr.r)
+	//for {
+	err = sr.recvNextStream()
+	if err != nil {
+		//break
+		return err
 	}
+	//}
 
 	if err == io.EOF {
 		err = nil

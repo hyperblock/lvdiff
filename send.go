@@ -2,15 +2,18 @@ package main
 
 import (
 	"crypto/md5"
-	"encoding/binary"
 	"errors"
 	"hash"
 	"io"
 	"os"
 
-	"github.com/yangjian/lvbackup/lvmutil"
-	"github.com/yangjian/lvbackup/thindump"
-	"github.com/yangjian/lvbackup/vgcfg"
+	"hyperblock/lvbackup/lvmutil"
+	"hyperblock/lvbackup/thindump"
+	"hyperblock/lvbackup/vgcfg"
+
+	"fmt"
+
+	"io/ioutil"
 
 	"github.com/ncw/directio"
 )
@@ -38,8 +41,12 @@ func newStreamSender(vgname, lvname, srcname string, w io.Writer) (*streamSender
 }
 
 func (s *streamSender) prepare() error {
+
+	//fmt.Println("prepare")
 	root, err := vgcfg.Dump(s.vgname)
+	//fmt.Println("dump finish.")
 	if err != nil {
+		//	fmt.Printf("%v\n", err)
 		return err
 	}
 
@@ -50,7 +57,8 @@ func (s *streamSender) prepare() error {
 	if !ok {
 		return errors.New("can not find thin lv " + s.lvname)
 	}
-
+	//fmt.Printf("name: [%s, %s]\n", s.srcname, s.lvname)
+	//	return nil
 	if len(s.srcname) > 0 {
 		srclv, ok = root.FindThinLv(s.srcname)
 		if !ok {
@@ -67,12 +75,14 @@ func (s *streamSender) prepare() error {
 	if !ok {
 		return errors.New("can not find thin pool " + lv.Pool)
 	}
-
+	//fmt.Println(s.vgname, pool.MetaName)
 	// dump block mapping
 	tpoolDev := lvmutil.TPoolDevicePath(s.vgname, pool.Name)
 	tmetaDev := lvmutil.LvDevicePath(s.vgname, pool.MetaName)
+	//fmt.Println(tpoolDev, tmetaDev)
 	superblk, err := thindump.Dump(tpoolDev, tmetaDev)
 	if err != nil {
+		fmt.Printf("thindump.Dump: %v\n", err)
 		return err
 	}
 
@@ -93,6 +103,7 @@ func (s *streamSender) prepare() error {
 	// list all blocks for full backup, or find changed blocks by comparing block
 	// mappings for incremental backup.
 	deltas, err := thindump.CompareDeviceBlocks(srcdev, dev)
+
 	if err != nil {
 		return err
 	}
@@ -114,15 +125,28 @@ func (s *streamSender) prepare() error {
 	return nil
 }
 
-func (s *streamSender) Run() error {
+func (s *streamSender) Run(header, output string) error {
+
 	if err := s.prepare(); err != nil {
+		fmt.Println(err.Error())
 		return err
 	}
 
-	if err := s.putHeader(&s.header); err != nil {
+	f, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE, 0664)
+	if err != nil {
+		fmt.Println(err.Error())
+		return nil
+	}
+	defer f.Close()
+	//	return nil
+
+	//if err := s.putHeader(&s.header); err != nil {
+	if err := s.putHeader(header, f); err != nil {
+		fmt.Println(err.Error())
 		return err
 	}
-
+	//	return nil
+	//	fmt.Println("- - - -- ")
 	if len(s.srcname) > 0 {
 		// always activate original lv so that target lv can be activated later
 		if err := lvmutil.ActivateLv(s.vgname, s.srcname); err != nil {
@@ -145,12 +169,14 @@ func (s *streamSender) Run() error {
 
 	buf := directio.AlignedBlock(int(s.header.BlockSize))
 
-	blockSize := int64(s.header.BlockSize)
+	blockSize := int64(s.header.BlockSize) //chunk size: 64KB,65536
+	//fmt.Println(blockSize)
+	//return nil
 	for _, e := range s.blocks {
 		if e.OpType == thindump.DeltaOpDelete {
 			for i := 0; i < len(buf); i++ {
 				buf[i] = 0
-			}
+			} // clear chunk data
 		} else {
 			if _, err := devFile.Seek(e.OriginBlock*blockSize, os.SEEK_SET); err != nil {
 				return err
@@ -160,47 +186,58 @@ func (s *streamSender) Run() error {
 				return err
 			}
 		}
-		if err := s.putBlock(e.OriginBlock, buf); err != nil {
+		//		if err := s.putBlock(e.OriginBlock, blockSize, buf); err != nil {
+		if err := s.putBlock(e.OriginBlock, blockSize, buf, f); err != nil {
 			return err
 		}
 	}
+	SHA1Code := fmt.Sprintf("%x\n", s.h.Sum(nil))
+	stdErr := os.Stderr
+	stdErr.Write([]byte(SHA1Code))
 
 	return nil
 }
 
-func (s *streamSender) putHeader(header *streamHeader) error {
-	data, err := header.MarshalBinary()
+//func (s *streamSender) putHeader(header *streamHeader) error {
+func (s *streamSender) putHeader(header string, f *os.File) error {
+
+	h, err := os.Open(header)
 	if err != nil {
 		return err
 	}
-
-	_, err = s.w.Write(data)
-	return err
+	defer h.Close()
+	buff, err := ioutil.ReadAll(h)
+	//_, err = h.Read(buff)
+	if err != nil {
+		return err
+	}
+	f.Write(buff)
+	return nil
 }
 
 // Wire Format of LVM Block in the stream:
 //   8 bytes: index; big endian
 //   N bytes: data
 //   M bytes: check sum of (index + data); currently always use MD5
-func (s *streamSender) putBlock(index int64, buf []byte) error {
-	var b [8]byte
-	binary.BigEndian.PutUint64(b[:], uint64(index))
+func (s *streamSender) putBlock(index int64, blockSize int64, buf []byte, f *os.File) error {
 
-	if _, err := s.w.Write(b[:]); err != nil {
+	subHead := []byte(fmt.Sprintf("%X %X\n", index*(blockSize>>9), blockSize>>9))
+	if _, err := f.Write(subHead); err != nil {
 		return err
 	}
-
-	if _, err := s.w.Write(buf); err != nil {
+	//buffer := make([]byte, blockSize)
+	if _, err := f.Write(buf); err != nil {
 		return err
 	}
-
-	s.h.Reset()
-	s.h.Write(b[:])
+	f.Write([]byte{0x0a})
 	s.h.Write(buf)
+	// s.h.Reset()
+	// s.h.Write(b[:])
+	// s.h.Write(buf)
 
-	if _, err := s.w.Write(s.h.Sum(nil)); err != nil {
-		return err
-	}
+	// if _, err := s.w.Write(s.h.Sum(nil)); err != nil {
+	// 	return err
+	// }
 
 	return nil
 }
