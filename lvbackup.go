@@ -14,8 +14,8 @@ func setupSendCommand(rootCmd *cobra.Command) {
 		Use:   "send",
 		Short: "create a stream representation of thin LV into standard output",
 		Run: func(cmd *cobra.Command, args []string) {
-			if len(vgname) == 0 || len(lvname) == 1 {
-				fmt.Fprintln(os.Stderr, "volume group and logical volume must be provided")
+			if len(vgname) == 0 || len(lvname) == 1 || len(srcname) == 0 {
+				fmt.Fprintln(os.Stderr, "volume group , logical volume , src volume must be provided")
 				cmd.Usage()
 				os.Exit(1)
 			}

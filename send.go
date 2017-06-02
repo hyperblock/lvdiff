@@ -80,34 +80,38 @@ func (s *streamSender) prepare() error {
 	tpoolDev := lvmutil.TPoolDevicePath(s.vgname, pool.Name)
 	tmetaDev := lvmutil.LvDevicePath(s.vgname, pool.MetaName)
 	//fmt.Println(tpoolDev, tmetaDev)
-	superblk, err := thindump.Dump(tpoolDev, tmetaDev)
+	fmt.Println(lv.DeviceId, srclv.DeviceId)
+	deltaResult, err := thindump.Dump(tpoolDev, tmetaDev, lv.DeviceId, srclv.DeviceId)
 	if err != nil {
 		fmt.Printf("thindump.Dump: %v\n", err)
 		return err
 	}
+	//fmt.Println(deltaResult)
 
-	var dev, srcdev *thindump.Device
+	// var dev, srcdev *thindump.Device
 
-	dev, ok = superblk.FindDevice(lv.DeviceId)
-	if !ok {
-		return errors.New("super block do not have device " + string(lv.DeviceId))
-	}
+	// dev, ok = superblk.FindDevice(lv.DeviceId)
+	// if !ok {
+	// 	return errors.New("super block do not have device " + string(lv.DeviceId))
+	// }
 
-	if srclv != nil {
-		srcdev, ok = superblk.FindDevice(srclv.DeviceId)
-		if !ok {
-			return errors.New("super block do not have device " + string(srclv.DeviceId))
-		}
-	}
+	// if srclv != nil {
+	// 	srcdev, ok = superblk.FindDevice(srclv.DeviceId)
+	// 	if !ok {
+	// 		return errors.New("super block do not have device " + string(srclv.DeviceId))
+	// 	}
+	// }
 
 	// list all blocks for full backup, or find changed blocks by comparing block
 	// mappings for incremental backup.
-	deltas, err := thindump.CompareDeviceBlocks(srcdev, dev)
+	//deltas, err := thindump.CompareDeviceBlocks(srcdev, dev)
+	deltas := thindump.ExpandBlocks(deltaResult)
 
 	if err != nil {
 		return err
 	}
-
+	//fmt.Println(deltas)
+	//return errors.New("-.- ")
 	s.blocks = deltas
 	s.header.SchemeVersion = StreamSchemeV1
 	s.header.StreamType = StreamTypeFull
@@ -138,9 +142,6 @@ func (s *streamSender) Run(header, output string) error {
 		return nil
 	}
 	defer f.Close()
-	//	return nil
-
-	//if err := s.putHeader(&s.header); err != nil {
 	if err := s.putHeader(header, f); err != nil {
 		fmt.Println(err.Error())
 		return err

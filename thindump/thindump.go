@@ -1,25 +1,24 @@
 package thindump
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"os"
 	"os/exec"
-	"path/filepath"
+	"sort"
 )
 
-func Parse(r io.Reader) (*SuperBlock, error) {
+//func Parse(r io.Reader) (*SuperBlock, error) {
+func Parse(r io.Reader) (*DiffBlocks, error) {
 	data, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
 
-	v := SuperBlock{}
+	//v := SuperBlock{}
+	v := DiffBlocks{}
 	if err := xml.Unmarshal(data, &v); err != nil {
 		return nil, err
 	}
@@ -41,7 +40,7 @@ func sendThinPoolMessage(tpoolDev, message string) error {
 	return nil
 }
 
-func Dump(tpoolDev, tmetaDev string) (*SuperBlock, error) {
+func Dump(tpoolDev, tmetaDev string, layer_id, parent_id int64) (*DiffBlocks, error) {
 	// just try to release the metadata snap in case of error; ignore the result
 	sendThinPoolMessage(tpoolDev, "release_metadata_snap")
 
@@ -50,32 +49,63 @@ func Dump(tpoolDev, tmetaDev string) (*SuperBlock, error) {
 	}
 	defer sendThinPoolMessage(tpoolDev, "release_metadata_snap")
 
-	path, err := exec.LookPath("thin_dump")
+	path, err := exec.LookPath("thin_delta")
 	if err != nil {
 		return nil, err
 	}
 
-	var buf [8]byte
-	if _, err := rand.Read(buf[:]); err != nil {
-		return nil, err
-	}
+	// var buf [8]byte
+	// if _, err := rand.Read(buf[:]); err != nil {
+	// 	return nil, err
+	// }
 
-	tmp := filepath.Join(os.TempDir(), fmt.Sprintf("thindump_%s.xml", hex.EncodeToString(buf[:])))
-
-	cmd := exec.Command(path, "-o", tmp, tmetaDev)
-	if err := cmd.Run(); err != nil {
-		return nil, err
-	}
-
-	defer os.Remove(tmp)
-
-	f, err := os.Open(tmp)
+	// tmp := filepath.Join(os.TempDir(), fmt.Sprintf("thindelta_%s.xml", hex.EncodeToString(buf[:])))
+	snap1 := fmt.Sprintf("%d", layer_id)
+	snap2 := fmt.Sprintf("%d", parent_id)
+	cmd := exec.Command(path, "-m", "--snap1", snap1, "--snap2", snap2, tmetaDev)
+	// if err := cmd.Run(); err != nil {
+	// 	return nil, err
+	// }
+	result, err := cmd.Output()
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	v := DeltaSuperBlock{}
+	if err = xml.Unmarshal(result, &v); err != nil {
+		return nil, err
+	}
+	return &v.DiffResult, nil
+}
 
-	return Parse(f)
+func ExpandBlocks(deltablocks *DiffBlocks) []DeltaEntry {
+
+	entries := []DeltaEntry{}
+	for _, m := range deltablocks.DifferentMappings {
+		for i := int64(0); i < m.Length; i++ {
+			entries = append(entries, DeltaEntry{
+				OriginBlock: m.Begin + i,
+				OpType:      DeltaOpUpdate,
+			})
+		}
+	}
+	for _, m := range deltablocks.LeftOnlyMappings {
+		for i := int64(0); i < m.Length; i++ {
+			entries = append(entries, DeltaEntry{
+				OriginBlock: m.Begin + i,
+				OpType:      DeltaOpCreate,
+			})
+		}
+	}
+	for _, m := range deltablocks.RightOnlyMappings {
+		for i := int64(0); i < m.Length; i++ {
+			entries = append(entries, DeltaEntry{
+				OriginBlock: m.Begin + i,
+				OpType:      DeltaOpDelete,
+			})
+		}
+	}
+	sort.Sort(entryByOrigin(entries))
+	return entries
 }
 
 func CompareDeviceBlocks(src, dst *Device) ([]DeltaEntry, error) {

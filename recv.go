@@ -96,10 +96,32 @@ func (sr *streamRecver) prepare() error {
 	return nil
 }
 
+func (sr *streamRecver) readHeader(bfRd *bufio.Reader) {
+
+	info := ""
+	for {
+		pair, err := bfRd.ReadBytes('\n')
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
+		if pair[0] == 0xa {
+			break
+		}
+		info += string(pair)
+	}
+	fmt.Printf("%s", info)
+}
+
 func (sr *streamRecver) recvNextStream() error {
 	// if err := sr.prepare(); err != nil {
 	// 	return err
 	// }
+	err := lvmutil.ActivateLv(sr.vgname, sr.lvname)
+	if err != nil {
+		return err
+	}
+	defer lvmutil.DeactivateLv(sr.vgname, sr.lvname)
 
 	devpath := lvmutil.LvDevicePath(sr.vgname, sr.lvname)
 	fmt.Printf("open devpath: %s\n", devpath)
@@ -111,6 +133,8 @@ func (sr *streamRecver) recvNextStream() error {
 	fmt.Println("open dev done.")
 
 	bfRd := bufio.NewReader(sr.r)
+	sr.readHeader(bfRd)
+	//	return nil
 	//	subHead := make([]byte, 18)
 	for {
 		//	if _, err := io.ReadFull(sr.r, subHead); err != nil {

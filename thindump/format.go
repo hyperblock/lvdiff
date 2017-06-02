@@ -27,6 +27,12 @@ func (a singleMappingsByOrigin) Len() int           { return len(a) }
 func (a singleMappingsByOrigin) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a singleMappingsByOrigin) Less(i, j int) bool { return a[i].OriginBlock < a[j].OriginBlock }
 
+type entryByOrigin []DeltaEntry
+
+func (a entryByOrigin) Len() int           { return len(a) }
+func (a entryByOrigin) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a entryByOrigin) Less(i, j int) bool { return a[i].OriginBlock < a[j].OriginBlock }
+
 type Device struct {
 	XMLName      xml.Name `xml:"device"`
 	DevId        int64    `xml:"dev_id,attr"`
@@ -37,6 +43,31 @@ type Device struct {
 
 	SingleMappings []SingleMapping `xml:"single_mapping"`
 	RangeMapping   []RangeMapping  `xml:"range_mapping"`
+}
+
+type DifferentMapping struct {
+	XMLName xml.Name `xml:"different"`
+	Begin   int64    `xml:"begin,attr"`
+	Length  int64    `xml:"length,attr"`
+}
+
+type LeftOnlyMapping struct {
+	XMLName xml.Name `xml:"left_only"`
+	Begin   int64    `xml:"begin,attr"`
+	Length  int64    `xml:"length,attr"`
+}
+
+type RightOnlyMapping struct {
+	XMLName xml.Name `xml:"right_only"`
+	Begin   int64    `xml:"begin,attr"`
+	Length  int64    `xml:"length,attr"`
+}
+
+type DiffBlocks struct {
+	XMLName           xml.Name           `xml:"diff"`
+	DifferentMappings []DifferentMapping `xml:"different"`
+	LeftOnlyMappings  []LeftOnlyMapping  `xml:"left_only"`
+	RightOnlyMappings []RightOnlyMapping `xml:"right_only"`
 }
 
 func (d *Device) ExpandRangeMappings() error {
@@ -70,6 +101,16 @@ type SuperBlock struct {
 	DataBlockSize    int64     `xml:"data_block_size,attr"`
 	NumberDataBlocks int64     `xml:"nr_data_blocks,attr"`
 	Devices          []*Device `xml:"device"`
+}
+
+type DeltaSuperBlock struct {
+	XMLName          xml.Name `xml:"superblock"`
+	Time             int64    `xml:"time,attr"`
+	Transaction      int64    `xml:"transaction,attr"`
+	DataBlockSize    int64    `xml:"data_block_size,attr"`
+	NumberDataBlocks int64    `xml:"nr_data_blocks,attr"`
+	//	Devices          []*Device `xml:"device"`
+	DiffResult DiffBlocks `xml:"diff"`
 }
 
 func (s SuperBlock) FindDevice(devid int64) (*Device, bool) {
