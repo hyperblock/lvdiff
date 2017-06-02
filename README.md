@@ -12,43 +12,57 @@ The incremental backup method is inspired by [lvmsync](https://github.com/mpalme
 
 The sub commands is inspired by zfs send/recv.
 
-## Installation
-
-    $ go get -u github.com/yangjian/lvbackup
-
 ## Usage
+
+#_NEED RUN AS ROOT_
 
 Create thin snapshot for thin volumes as usual (it's better to freeze the file system before creating snapshot
 
     lvcreate -s -n {SNAP_NAME} {VG_NAME}/{LV_NAME}
     
-Create full backup, save it into file:
+<!Or send it to another host by network:
  
-    lvbackup send -v {VG_NAME} -l {SNAP_NAME} > {OUTPUT_FILE}
+    lvbackup send -v {VG_NAME} -l {SNAP_NAME} | nc {OTHER_HOST}>
     
-Or send it to another host by network:
- 
-    lvbackup send -v {VG_NAME} -l {SNAP_NAME} | nc {OTHER_HOST}
-    
-If there is an old snaphot, you can create incremental backup:
+You can create incremental backup:
   
-    lvbackup send -v {VG_NAME} -l {SNAP_NAME} -i {OLD_SNAP_NAME} > {OUTPUT_FILE}
+    lvbackup send -v {VG_NAME} -l {SNAP_NAME} -i {OLD_SNAP_NAME} --head {HEADER_FILE} -o {OUTPUT_FILE}
+	
+	eg. lvbackup send -v vg001 -l sp001 -i vol0 --head header -o backup_sp001_0
 
-To check the info of backup file:
+<!To check the info of backup file:
     
-    lvbackup info {BACKUP_FILE}
+    lvbackup info {BACKUP_FILE}>
 
-To restore the volume from full backup, create volume group and thin pool if they do not exists. Then, run recv subcommand: 
+To restore the volume from backup, you need have the old volume. Then, run recv subcommand: 
 
-    lvbackup recv -v {VG_NAME} -p {POOL_NAME} -l {LV_NAME} < {BACKUP_FILE}
+    lvbackup recv -v {VG_NAME} -p {POOL_NAME} -l {LV_NAME} -i {BACKUP_FILE}
 
-To restore the volume from backup chain:
+<! restore the volume from backup chain:i
 
     cat {FULL_BACKUP} {DELTA_0} {DELTA_1} ... | \
-    lvbackup recv -v {VG_NAME} -p {POOL_NAME} -l {LV_NAME}
+    lvbackup recv -v {VG_NAME} -p {POOL_NAME} -l {LV_NAME}>
 
 Please note that the chunk size of thin pool for restoring must be equal to that in the backup files.
 
+##Exported Format of Layers (backup file)
+
+>HYPERLAYER/1.0
+><key>: <value>
+><key>: <value>
+><key>: <value>
+><key>: <value>
+>
+><offset> <length>
+><data of $length*512 bytes>
+><offset> <length>
+><data of $length*512 bytes>
+><offset> <length>
+><data of $length*512 bytes>
+>...
+
+
+<!
 ## TODO
 
 * Feature: merge continus incremental backups into single one
@@ -56,4 +70,4 @@ Please note that the chunk size of thin pool for restoring must be equal to that
 * Enhance: add unit tests
 * Enhance: improve the error message displaying
 * Enhance: add document about the format of stream data
-
+>
