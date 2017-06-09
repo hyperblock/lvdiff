@@ -5,7 +5,9 @@ A pair of tools ( lvdiff/lvpatch ) to backup and restore LVM2 thinly-provisioned
 
 ## Usage (__NEED RUN AS ROOT__)
 
-Create a thin snapshot: lvcreate -n -s <SNAP\_SHOT> <VGNAME>/<VLNAME>
+Create a thin snapshot:   
+
+    lvcreate -n -s <SNAP_SHOT> <VGNAME>/<VLNAME>
 
 ### lvdiff
 lvdiff is a tool to backup LVM2 thinly-provisioned volumes, will dump the thin volume $volume's incremental block from $backing-volume
