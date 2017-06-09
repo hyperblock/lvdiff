@@ -1,13 +1,19 @@
-#lvdiff
+# lvdiff
 
 A pair of tools ( lvdiff/lvpatch ) to backup and restore LVM2 thinly-provisioned volumes.
 
+## Compile
+
+    go build lvdiff.go
+    go build lvpatch.go
 
 ## Usage (__NEED RUN AS ROOT__)
 
-Create a thin snapshot: lvcreate -n -s <SNAP\_SHOT> <VGNAME>/<VLNAME>
+Create a thin snapshot:  
+	
+	lvcreate -n -s <SNAP_SHOT> <VG_NAME>/<VOL_NAME>
 
-###lvdiff
+### lvdiff
 lvdiff is a tool to backup LVM2 thinly-provisioned volumes, will dump the thin volume $volume's incremental block from $backing-volume
 
 __Usage:__  
@@ -20,7 +26,7 @@ __Usage:__
         --pair stringArray   set key-value pair (format as '$key:$value').  
     -p, --pool string        thin volume pool.
 
-__eg.  __  
+__eg.__  
 For a volume group:
 
     vg001
@@ -34,7 +40,7 @@ For a volume group:
    It will dump the different blocks between 'sp001' and 'vol0' and save as 'sp001\_vol0.diff'. And SHA1 code will be shown in Stderr.
     
 
-###lvpatch
+### lvpatch
 lvpatch is a tool to patch volume's diff file (a set of volume's change blocks) to another thin-volume.
 
 __Usage:__
