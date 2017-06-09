@@ -1,4 +1,4 @@
-package main
+package lvbackup
 
 import (
 	"crypto/md5"
@@ -7,13 +7,13 @@ import (
 	"io"
 	"os"
 
-	"hyperblock/lvbackup/lvmutil"
-	"hyperblock/lvbackup/thindump"
-	"hyperblock/lvbackup/vgcfg"
+	yaml "gopkg.in/yaml.v2"
+
+	"lvbackup/lvmutil"
+	"lvbackup/thindelta"
+	"lvbackup/vgcfg"
 
 	"fmt"
-
-	"io/ioutil"
 
 	"github.com/ncw/directio"
 )
@@ -24,13 +24,13 @@ type streamSender struct {
 	srcname string
 
 	header streamHeader
-	blocks []thindump.DeltaEntry
+	blocks []thindelta.DeltaEntry
 
 	w io.Writer
 	h hash.Hash
 }
 
-func newStreamSender(vgname, lvname, srcname string, w io.Writer) (*streamSender, error) {
+func NewStreamSender(vgname, lvname, srcname string, w io.Writer) (*streamSender, error) {
 	return &streamSender{
 		vgname:  vgname,
 		lvname:  lvname,
@@ -54,10 +54,14 @@ func (s *streamSender) prepare() error {
 	var ok bool
 
 	lv, ok = root.FindThinLv(s.lvname)
+
 	if !ok {
 		return errors.New("can not find thin lv " + s.lvname)
 	}
-	//fmt.Printf("name: [%s, %s]\n", s.srcname, s.lvname)
+	// fmt.Println(lv.Tags)
+	// fmt.Printf("name: [%s, %s]\n", s.srcname, s.lvname)
+	//	return errors.New("can not find thin lv " + s.lvname)
+
 	//	return nil
 	if len(s.srcname) > 0 {
 		srclv, ok = root.FindThinLv(s.srcname)
@@ -80,8 +84,8 @@ func (s *streamSender) prepare() error {
 	tpoolDev := lvmutil.TPoolDevicePath(s.vgname, pool.Name)
 	tmetaDev := lvmutil.LvDevicePath(s.vgname, pool.MetaName)
 	//fmt.Println(tpoolDev, tmetaDev)
-	fmt.Println(lv.DeviceId, srclv.DeviceId)
-	deltaResult, err := thindump.Dump(tpoolDev, tmetaDev, lv.DeviceId, srclv.DeviceId)
+	//fmt.Println(lv.DeviceId, srclv.DeviceId)
+	deltaResult, err := thindelta.Delta(tpoolDev, tmetaDev, lv.DeviceId, srclv.DeviceId)
 	if err != nil {
 		fmt.Printf("thindump.Dump: %v\n", err)
 		return err
@@ -105,7 +109,7 @@ func (s *streamSender) prepare() error {
 	// list all blocks for full backup, or find changed blocks by comparing block
 	// mappings for incremental backup.
 	//deltas, err := thindump.CompareDeviceBlocks(srcdev, dev)
-	deltas := thindump.ExpandBlocks(deltaResult)
+	deltas := thindelta.ExpandBlocks(deltaResult)
 
 	if err != nil {
 		return err
@@ -113,41 +117,37 @@ func (s *streamSender) prepare() error {
 	//fmt.Println(deltas)
 	//return errors.New("-.- ")
 	s.blocks = deltas
-	s.header.SchemeVersion = StreamSchemeV1
-	s.header.StreamType = StreamTypeFull
+	//	s.header.SchemeVersion = StreamSchemeV1
+	//	s.header.StreamType = StreamTypeFull
+	s.header.Name = lv.Name
 	s.header.VolumeSize = uint64(lv.ExtentCount) * uint64(root.ExtentSize())
 	s.header.BlockSize = uint32(pool.ChunkSize)
+	s.header.VolumeUUID = lv.UUID
 	s.header.BlockCount = uint64(len(s.blocks))
 
-	copy(s.header.VolumeUUID[:], []byte(lv.UUID))
+	//	copy(s.header.VolumeUUID[:], []byte(lv.UUID))
 
 	if srclv != nil {
-		s.header.StreamType = StreamTypeDelta
-		copy(s.header.DeltaSourceUUID[:], []byte(srclv.UUID))
+		//s.header.StreamType = StreamTypeDelta
+		//	copy(s.header.DeltaSourceUUID[:], []byte(srclv.UUID))
+		s.header.DeltaSourceUUID = srclv.UUID
 	}
 
 	return nil
 }
 
-func (s *streamSender) Run(header, output string) error {
+func (s *streamSender) Run(header string) error {
 
 	if err := s.prepare(); err != nil {
 		fmt.Println(err.Error())
 		return err
 	}
 
-	f, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE, 0664)
-	if err != nil {
-		fmt.Println(err.Error())
-		return nil
-	}
-	defer f.Close()
-	if err := s.putHeader(header, f); err != nil {
+	if err := s.putHeader(header); err != nil {
 		fmt.Println(err.Error())
 		return err
 	}
-	//	return nil
-	//	fmt.Println("- - - -- ")
+
 	if len(s.srcname) > 0 {
 		// always activate original lv so that target lv can be activated later
 		if err := lvmutil.ActivateLv(s.vgname, s.srcname); err != nil {
@@ -174,7 +174,7 @@ func (s *streamSender) Run(header, output string) error {
 	//fmt.Println(blockSize)
 	//return nil
 	for _, e := range s.blocks {
-		if e.OpType == thindump.DeltaOpDelete {
+		if e.OpType == thindelta.DeltaOpDelete {
 			for i := 0; i < len(buf); i++ {
 				buf[i] = 0
 			} // clear chunk data
@@ -188,31 +188,39 @@ func (s *streamSender) Run(header, output string) error {
 			}
 		}
 		//		if err := s.putBlock(e.OriginBlock, blockSize, buf); err != nil {
-		if err := s.putBlock(e.OriginBlock, blockSize, buf, f); err != nil {
+		if err := s.putBlock(e.OriginBlock, blockSize, buf); err != nil {
 			return err
 		}
 	}
 	SHA1Code := fmt.Sprintf("%x\n", s.h.Sum(nil))
-	stdErr := os.Stderr
-	stdErr.Write([]byte(SHA1Code))
-
+	// stdErr := os.Stderr
+	// stdErr.Write([]byte(SHA1Code))
+	fmt.Fprint(os.Stderr, "SHA1: "+SHA1Code)
 	return nil
 }
 
 //func (s *streamSender) putHeader(header *streamHeader) error {
-func (s *streamSender) putHeader(header string, f *os.File) error {
+func (s *streamSender) putHeader(header string) error {
 
-	h, err := os.Open(header)
+	// h, err := os.Open(header)
+	// if err != nil {
+	// 	return err
+	// }
+	// defer h.Close()
+	// buff, err := ioutil.ReadAll(h)
+	// //_, err = h.Read(buff)
+	// if err != nil {
+	// 	return err
+	// }
+	// f.Write(buff)
+	headBuf, err := yaml.Marshal(s.header)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "marshal head failed.\n")
 		return err
 	}
-	defer h.Close()
-	buff, err := ioutil.ReadAll(h)
-	//_, err = h.Read(buff)
-	if err != nil {
-		return err
-	}
-	f.Write(buff)
+	s.w.Write([]byte(C_HEAD))
+	s.w.Write(headBuf)
+	s.w.Write([]byte{0x0a})
 	return nil
 }
 
@@ -220,17 +228,18 @@ func (s *streamSender) putHeader(header string, f *os.File) error {
 //   8 bytes: index; big endian
 //   N bytes: data
 //   M bytes: check sum of (index + data); currently always use MD5
-func (s *streamSender) putBlock(index int64, blockSize int64, buf []byte, f *os.File) error {
+func (s *streamSender) putBlock(index int64, blockSize int64, buf []byte) error {
 
 	subHead := []byte(fmt.Sprintf("%X %X\n", index*(blockSize>>9), blockSize>>9))
-	if _, err := f.Write(subHead); err != nil {
+	if _, err := s.w.Write(subHead); err != nil {
 		return err
 	}
 	//buffer := make([]byte, blockSize)
-	if _, err := f.Write(buf); err != nil {
+	if _, err := s.w.Write(buf); err != nil {
 		return err
 	}
-	f.Write([]byte{0x0a})
+	//f.Write([]byte{0x0a})
+	s.w.Write([]byte{0x0a})
 	s.h.Write(buf)
 	// s.h.Reset()
 	// s.h.Write(b[:])

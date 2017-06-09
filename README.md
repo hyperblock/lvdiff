@@ -1,31 +1,64 @@
-# lvbackup
+#lvdiff
 
-A tool to backup and restore LVM2 thinly-provisioned volumes.
+A pair of tools ( lvdiff/lvpatch ) to backup and restore LVM2 thinly-provisioned volumes.
 
-This tool can do full backup and incremental for thin volume. In full backup mode, lvbackup only saves the blocks used by the thin volume to minimize the backup size. In incremental backup mode, lvbackup detects the created/changed/deleted blocks from source volume to target volume. 
-
-All the data, which are written to standard output, can be compressed and saved as local file.
-
-The volumes can be restored from incremental backup file, or multiple continus incremental backup files.
-
-The incremental backup method is inspired by [lvmsync](https://github.com/mpalmer/lvmsync). 
-
-The sub commands is inspired by zfs send/recv.
 
 ## Usage (__NEED RUN AS ROOT__)
 
-Create thin snapshot for thin volumes as usual (it's better to freeze the file system before creating snapshot
+Create a thin snapshot: lvcreate -n -s <SNAP\_SHOT> <VGNAME>/<VLNAME>
 
-    lvcreate -s -n {SNAP_NAME} {VG_NAME}/{LV_NAME}
+###lvdiff
+lvdiff is a tool to backup LVM2 thinly-provisioned volumes, will dump the thin volume $volume's incremental block from $backing-volume
+
+__Usage:__  
+
+    lvdiff <volume> <backing-volume> [flags]
+
+    Flags:
+    -h, --help               help for lvdiff  
+    -g, --lvgroup string     volume group.  
+        --pair stringArray   set key-value pair (format as '$key:$value').  
+    -p, --pool string        thin volume pool.
+
+__eg.  __  
+For a volume group:
+
+    vg001
+      - thin_pool0
+        - vol0
+        - snap001
+   __run command:__  
+     
+    sudo ./lvdiff -g vg001 -p thin_pool0 --pair 'Author:BigVan (alpc_metic@live.com)' sp001 vol0 > sp001_vol0.diff
+
+   It will dump the different blocks between 'sp001' and 'vol0' and save as 'sp001\_vol0.diff'. And SHA1 code will be shown in Stderr.
     
-You can create incremental backup:
-  
-    lvbackup send -v {VG_NAME} -l {SNAP_NAME} -i {OLD_SNAP_NAME} --head {HEADER_FILE} -o {OUTPUT_FILE}
-	
-	eg. lvbackup send -v vg001 -l sp001 -i vol0 --head header -o backup_sp001_0
 
-To restore the volume from backup, you need have the old volume. Then, run recv subcommand: 
+###lvpatch
+lvpatch is a tool to patch volume's diff file (a set of volume's change blocks) to another thin-volume.
 
-    lvbackup recv -v {VG_NAME} -p {POOL_NAME} -l {LV_NAME} -i {BACKUP_FILE}
+__Usage:__
+
+    lvpatch <input_diff_file> [flags]
+    
+    Flags:
+      -h, --help             help for lvpatch
+      -l, --lv string        logical volume
+      -g, --lvgroup string   volume group
+      -p, --pool string      thin pool
+
+__eg.__  
+For a volume group:  
+
+    vg001
+     - thin_pool0
+       - vol0
+
+   __run command:__  
+   
+    sudo ./lvpatch -g vg001 -p thin_pool0 -l vol0 sp001_vol0.diff
+
+   It will restore thin snapshot volume /dev/vg001/sp001
+   
 
 Please note that the chunk size of thin pool for restoring must be equal to that in the backup files.

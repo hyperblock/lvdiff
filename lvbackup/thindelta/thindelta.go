@@ -1,4 +1,4 @@
-package thindump
+package thindelta
 
 import (
 	"encoding/xml"
@@ -40,7 +40,7 @@ func sendThinPoolMessage(tpoolDev, message string) error {
 	return nil
 }
 
-func Dump(tpoolDev, tmetaDev string, layer_id, parent_id int64) (*DiffBlocks, error) {
+func Delta(tpoolDev, tmetaDev string, layer_id, parent_id int64) (*DiffBlocks, error) {
 	// just try to release the metadata snap in case of error; ignore the result
 	sendThinPoolMessage(tpoolDev, "release_metadata_snap")
 

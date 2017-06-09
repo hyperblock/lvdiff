@@ -17,9 +17,10 @@ type ThinPoolInfo struct {
 }
 
 type ThinLvInfo struct {
-	UUID          string `json:"uuid"`
-	Name          string `json:"name"`
-	Pool          string `json:"pool"`
+	UUID string `json:"uuid"`
+	Name string `json:"name"`
+	Pool string `json:"pool"`
+	//	Tags          []string `json:"tags"`
 	Origin        string `json:"origin"`
 	TransactionId int64  `json:"tx_id"`
 	DeviceId      int64  `json:"dev_id"`
@@ -80,6 +81,16 @@ func (g *Group) VarStringValue(key string) (string, bool) {
 	s, ok := v.(string)
 	return s, ok
 }
+
+// func (g *Group) VarStringArrayValue(key string) ([]string, bool) {
+// 	v, ok := g.variables[key]
+// 	if !ok {
+// 		return []string{}, false
+// 	}
+
+// 	s, ok := v.([]string)
+// 	return s, ok
+// }
 
 func (g *Group) VarIntegerValue(key string) (int64, bool) {
 	v, ok := g.variables[key]
@@ -244,6 +255,10 @@ func (g *Group) ThinLvInfo() *ThinLvInfo {
 	if val, ok := s1.VarStringValue("origin"); ok {
 		info.Origin = val
 	}
+
+	// if val, ok := s1.VarStringArrayValue("tags"); ok {
+	// 	info.Tags = val
+	// }
 
 	info.Name = g.Name()
 	return &info

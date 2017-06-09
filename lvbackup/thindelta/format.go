@@ -1,4 +1,4 @@
-package thindump
+package thindelta
 
 import (
 	"encoding/xml"

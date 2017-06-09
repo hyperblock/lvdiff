@@ -51,7 +51,7 @@ func Dump(vgname string) (*Group, error) {
 	if err := cmd.Run(); err != nil {
 		return nil, err
 	}
-
+	//fmt.Println(tmp)
 	defer os.Remove(tmp)
 
 	f, err := os.Open(tmp)
