@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"lvbackup/lvmutil"
+	"lvbackup/thindelta"
 	"lvbackup/vgcfg"
 
 	"github.com/ncw/directio"
@@ -21,24 +22,28 @@ import (
 )
 
 type streamRecver struct {
-	vgname   string
-	poolname string
-	lvname   string
+	vgname       string
+	poolname     string
+	lvname       string
+	disableCheck bool
 
 	header   streamHeader
 	prevUUID string
+
+	baseBlocks []thindelta.BlockHash
 
 	r io.Reader
 	h hash.Hash
 }
 
-func NewStreamRecver(vgname, poolname, lvname string, r io.Reader) (*streamRecver, error) {
+func NewStreamRecver(vgname, poolname, lvname string, flg bool, r io.Reader) (*streamRecver, error) {
 	return &streamRecver{
-		vgname:   vgname,
-		poolname: poolname,
-		lvname:   lvname,
-		r:        r,
-		h:        md5.New(),
+		vgname:       vgname,
+		poolname:     poolname,
+		lvname:       lvname,
+		disableCheck: flg,
+		r:            r,
+		h:            md5.New(),
 	}, nil
 }
 
@@ -55,27 +60,12 @@ func print_ProcessBar(current, total int64) string {
 		bar += " "
 	}
 	bar += "]"
-	// //	A, B := current>>20, total>>20
-	// 	if A == 0 {
-	// 		A = 1
-	// 	}
-	// 	if B == 0 {
-	// 		B = 1
-	// 	}
+
 	ret := fmt.Sprintf("%s %d%% (%d/%d)", bar, base, current, total)
 	return ret
 }
 
 func (sr *streamRecver) prepare() error {
-
-	// var buf [SchemeV1HeaderLength]byte
-	// if _, err := io.ReadFull(sr.r, buf[:]); err != nil {
-	// 	return err
-	// }
-
-	// if err := sr.header.UnmarshalBinary(buf[:]); err != nil {
-	// 	return err
-	// }
 
 	// check whether block size of pool match with the stream
 
@@ -93,12 +83,25 @@ func (sr *streamRecver) prepare() error {
 		return errors.New("block size does not match with that of local pool")
 	}
 
-	// create new lv if needed
-	// if sr.header.StreamType == StreamTypeFull {
-	// 	if err := lvmutil.CreateThinLv(sr.vgname, sr.poolname, sr.lvname, int64(sr.header.VolumeSize)); err != nil {
-	// 		return errors.New("can not create thin lv: " + err.Error())
-	// 	}
-	// }
+	if sr.disableCheck == false {
+
+		_, ok := root.FindThinLv(sr.lvname)
+
+		if !ok {
+			return errors.New("can not find thin lv " + sr.lvname)
+		}
+
+		devPath := lvmutil.LvDevicePath(sr.vgname, sr.lvname)
+		ok, err := thindelta.CheckBase(devPath, pool.ChunkSize, sr.baseBlocks)
+		if err != nil {
+			return fmt.Errorf("Get volume checksum (%s/%s) error. %s", sr.vgname, sr.lvname, err.Error())
+		}
+		//	fmt.Println(lvChecksum)
+
+		if !ok {
+			return fmt.Errorf("checksum incorrect.")
+		}
+	}
 
 	//create a snapshot
 	fmt.Printf("Create Snapshot volume. (%s)\n", sr.header.Name)
@@ -107,32 +110,11 @@ func (sr *streamRecver) prepare() error {
 	}
 	sr.lvname = sr.header.Name
 
-	// if sr.header.StreamType == StreamTypeDelta {
-	// 	expected := string(sr.header.DeltaSourceUUID[:])
-	// 	if len(sr.prevUUID) > 0 && sr.prevUUID != expected {
-	// 		return fmt.Errorf("incremental backup chain is broken; expects %s but prev is %s ", expected, sr.prevUUID)
-	// 	}
-
-	// 	// resize the volume if needed
-	// 	lv, ok := root.FindThinLv(sr.lvname)
-	// 	if !ok {
-	// 		return errors.New("can not find thin lv " + sr.lvname)
-	// 	}
-
-	// 	size := int64(sr.header.VolumeSize)
-	// 	if lv.ExtentCount*root.ExtentSize() != size {
-	// 		if err := lvmutil.ResizeLv(sr.vgname, sr.lvname, size); err != nil {
-	// 			return errors.New("can not resize thin lv: " + err.Error())
-	// 		}
-	// 	}
-	// }
-
 	return nil
 }
 
 func (sr *streamRecver) readHeader(bfRd *bufio.Reader) error {
 
-	//info := ""
 	headBuff := []byte{}
 	index := 0
 	for {
@@ -144,10 +126,10 @@ func (sr *streamRecver) readHeader(bfRd *bufio.Reader) error {
 		if pair[0] == 0xa {
 			break
 		}
-		//info += string(pair)
 		if index > 0 {
 			headBuff = append(headBuff, pair[0:]...)
 		}
+		fmt.Fprintf(os.Stderr, "%s", string(pair))
 		index++
 	}
 
@@ -156,13 +138,50 @@ func (sr *streamRecver) readHeader(bfRd *bufio.Reader) error {
 		return err
 	}
 	return nil
-	//fmt.Printf("%s", info)
+
 }
 
-func (sr *streamRecver) recvNextStream() error {
+func (sr *streamRecver) readBaseBlocks(bfRd *bufio.Reader) error {
+
+	if sr.header.DetectLevel == 0 {
+		return nil
+	}
+	for {
+		buf, err := bfRd.ReadBytes('\n')
+		if err != nil {
+			fmt.Println(err.Error())
+			return err
+		}
+		if buf[0] == 0xa {
+			break
+		}
+		tokens := strings.Split(string(buf), " ")
+		offset, err := strconv.ParseInt(tokens[1], 16, 64)
+		if err != nil {
+			return err
+		}
+		length, err := strconv.ParseInt(tokens[2], 16, 64)
+		if err != nil {
+			return err
+		}
+		baseBlock := thindelta.BlockHash{
+			Offset:   offset,
+			Length:   length,
+			HashType: tokens[3],
+			Value:    tokens[4][:len(tokens[4])-1],
+		}
+		sr.baseBlocks = append(sr.baseBlocks, baseBlock)
+	}
+	//	fmt.Println(sr.baseBlocks)
+	return nil
+}
+
+func (sr *streamRecver) recvDiffStream() error {
 
 	bfRd := bufio.NewReader(sr.r)
 	sr.readHeader(bfRd)
+	sr.readBaseBlocks(bfRd)
+
 	if err := sr.prepare(); err != nil {
 		return err
 	}
@@ -171,46 +190,39 @@ func (sr *streamRecver) recvNextStream() error {
 	if err != nil {
 		return err
 	}
+	//return nil
 	defer lvmutil.DeactivateLv(sr.vgname, sr.lvname)
 
 	devpath := lvmutil.LvDevicePath(sr.vgname, sr.lvname)
-	//	fmt.Printf("open devpath: %s\n", devpath)
+
 	devFile, err := directio.OpenFile(devpath, os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
 	defer devFile.Close()
-	//fmt.Println("open dev done.")
-	//	fmt.Println(sr.header)
+
 	total := int64(sr.header.BlockCount)
 	dwWritten := int64(0)
 	//	fmt.Println(total)
 	for {
-		bar := print_ProcessBar(dwWritten, total)
-		fmt.Printf("\rPatch blocks %s", bar)
 
-		//	fmt.Println("read data.")
-		//	if _, err := io.ReadFull(sr.r, subHead); err != nil {
 		line, err := bfRd.ReadBytes('\n')
 		//fmt.Println(string(subHead))
 		if err != nil {
-			//	if err==err.e
-			//fmt.Println(err.Error())
+
 			return err
 		}
 		subHead := string(line[:len(line)-1])
 
 		args := strings.Split(subHead, " ")
-		if len(args) != 2 {
+		if len(args) != 3 {
 			break
 		}
-		offset, _ := strconv.ParseInt(args[0], 16, 64)
-		length, _ := strconv.ParseInt(args[1], 16, 64)
+		offset, _ := strconv.ParseInt(args[1], 16, 64)
+		length, _ := strconv.ParseInt(args[2], 16, 64)
 		length <<= 9
 		offset <<= 9
-		//	fmt.Println(offset, length)
-		//		sr.h.Reset()
-		//		sr.h.Write(b[:n])
+
 		tmpbuf := make([]byte, length)
 		buf := make([]byte, length)
 		var cnt int64
@@ -226,16 +238,7 @@ func (sr *streamRecver) recvNextStream() error {
 			}
 			tmpbuf = make([]byte, length-cnt)
 		}
-		//	newline := make([]byte, 1)
-		//io.ReadFull(sr.r, newline)
-		// if !bytes.Equal(sr.h.Sum(nil), b[n:n+md5.Size]) {
-		// 	return fmt.Errorf("check sum mismatch for %dst block", i)
-		// }
 
-		// index := int64(binary.BigEndian.Uint64(b))
-		// copy(buf, b[8:n])
-
-		//	if _, err := devFile.Seek(int64(sr.header.BlockSize)*index, os.SEEK_SET); err != nil {
 		if _, err := devFile.Seek(offset, os.SEEK_SET); err != nil {
 			fmt.Println("seek error.")
 			return err
@@ -245,10 +248,10 @@ func (sr *streamRecver) recvNextStream() error {
 			return err
 		}
 		dwWritten++
-		//fmt.Println("bar?")
-		//	fmt.Println("done")
-		//	bfRd.ReadLine()
+		//fmt.Println(dwWritten)
 		bfRd.ReadBytes('\n')
+		bar := print_ProcessBar(dwWritten, total)
+		fmt.Printf("\rPatch blocks %s", bar)
 	}
 	fmt.Println("\ndone")
 
@@ -260,12 +263,7 @@ func (sr *streamRecver) Run() error {
 	var err error
 	//bfRd := bufio.NewReader(sr.r)
 	//for {
-	err = sr.recvNextStream()
-	// if err != nil {
-	// 	//break
-	// 	return err
-	// }
-	// //}
+	err = sr.recvDiffStream()
 
 	if err == io.EOF {
 		fmt.Println("\nDone.")

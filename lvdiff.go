@@ -26,6 +26,7 @@ func main() {
 	//	var value []string
 	var vgname string
 	var vol, backingVol string
+	var depth int32
 	//var output string
 	header := c_HEADER
 
@@ -35,6 +36,11 @@ func main() {
 		Run: func(cmd *cobra.Command, args []string) {
 			if pool == "" || vgname == "" || len(args) < 2 {
 				fmt.Fprintf(os.Stderr, "Too few arguments.")
+				rootCmd.Usage()
+				return
+			}
+			if depth < 0 && depth > 3 {
+				fmt.Fprintf(os.Stderr, "Detect level range: 0-3")
 				rootCmd.Usage()
 				return
 			}
@@ -52,15 +58,9 @@ func main() {
 			}
 			vol, backingVol = args[0], args[1]
 			f := os.Stdout
-			// if output != "" {
-			// 	f, err := os.OpenFile(output, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0664)
-			// 	if err != nil {
-			// 		fmt.Fprintf(os.Stderr, "Create dump file error. %s", err.Error())
-			// 		return
-			// 	}
-			// 	defer f.Close()
-			// }
-			sender, err := lvbackup.NewStreamSender(vgname, vol, backingVol, f)
+
+			sender, err := lvbackup.NewStreamSender(vgname, vol, backingVol, f, int(depth))
+
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				return
@@ -73,7 +73,11 @@ func main() {
 	}
 	rootCmd.Flags().StringVarP(&vgname, "lvgroup", "g", "", "volume group.")
 	rootCmd.Flags().StringVarP(&pool, "pool", "p", "", "thin volume pool.")
-	//	rootCmd.Flags().StringVarP(&output, "output", "o", "", "output file.")
+	rootCmd.Flags().Int32VarP(&depth, "", "d", 2, `checksum detect level. range: 0-3 
+														0 means no checksum, 
+														1 means only check head block, 
+														2 means random check, 
+														3 means scan all data blocks.`)
 	//	rootCmd.Flags().StringVarP(&vol, "vol", "v", "", "thin volume name.")
 	//	rootCmd.Flags().StringVarP(&backingVol, "backing-volume", "b", "", "thin volume name.")
 	rootCmd.Flags().StringArrayVarP(&strPair, "pair", "", nil, "set key-value pair (format as '$key:$value').")

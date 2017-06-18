@@ -51,6 +51,12 @@ type DifferentMapping struct {
 	Length  int64    `xml:"length,attr"`
 }
 
+type SameMapping struct {
+	XMLName xml.Name `xml:"same"`
+	Begin   int64    `xml:"begin,attr"`
+	Length  int64    `xml:"length,attr"`
+}
+
 type LeftOnlyMapping struct {
 	XMLName xml.Name `xml:"left_only"`
 	Begin   int64    `xml:"begin,attr"`
@@ -63,11 +69,12 @@ type RightOnlyMapping struct {
 	Length  int64    `xml:"length,attr"`
 }
 
-type DiffBlocks struct {
+type DeltaBlocks struct {
 	XMLName           xml.Name           `xml:"diff"`
 	DifferentMappings []DifferentMapping `xml:"different"`
 	LeftOnlyMappings  []LeftOnlyMapping  `xml:"left_only"`
 	RightOnlyMappings []RightOnlyMapping `xml:"right_only"`
+	SameMappings      []SameMapping      `xml:"same"`
 }
 
 func (d *Device) ExpandRangeMappings() error {
@@ -110,7 +117,7 @@ type DeltaSuperBlock struct {
 	DataBlockSize    int64    `xml:"data_block_size,attr"`
 	NumberDataBlocks int64    `xml:"nr_data_blocks,attr"`
 	//	Devices          []*Device `xml:"device"`
-	DiffResult DiffBlocks `xml:"diff"`
+	DiffResult DeltaBlocks `xml:"diff"`
 }
 
 func (s SuperBlock) FindDevice(devid int64) (*Device, bool) {
@@ -128,6 +135,7 @@ const (
 	DeltaOpCreate DeltaOpType = 1
 	DeltaOpUpdate DeltaOpType = 2
 	DeltaOpDelete DeltaOpType = 4
+	DeltaOpIgnore DeltaOpType = 0
 )
 
 type DeltaEntry struct {

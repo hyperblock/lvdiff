@@ -19,9 +19,10 @@ import (
 )
 
 type streamSender struct {
-	vgname  string
-	lvname  string
-	srcname string
+	vgname   string
+	lvname   string
+	srcname  string
+	detectLv int
 
 	header streamHeader
 	blocks []thindelta.DeltaEntry
@@ -30,23 +31,21 @@ type streamSender struct {
 	h hash.Hash
 }
 
-func NewStreamSender(vgname, lvname, srcname string, w io.Writer) (*streamSender, error) {
+func NewStreamSender(vgname, lvname, srcname string, w io.Writer, lv int) (*streamSender, error) {
 	return &streamSender{
-		vgname:  vgname,
-		lvname:  lvname,
-		srcname: srcname,
-		w:       w,
-		h:       md5.New(),
+		vgname:   vgname,
+		lvname:   lvname,
+		srcname:  srcname,
+		detectLv: lv,
+		w:        w,
+		h:        md5.New(),
 	}, nil
 }
 
 func (s *streamSender) prepare() error {
 
-	//fmt.Println("prepare")
 	root, err := vgcfg.Dump(s.vgname)
-	//fmt.Println("dump finish.")
 	if err != nil {
-		//	fmt.Printf("%v\n", err)
 		return err
 	}
 
@@ -58,11 +57,7 @@ func (s *streamSender) prepare() error {
 	if !ok {
 		return errors.New("can not find thin lv " + s.lvname)
 	}
-	// fmt.Println(lv.Tags)
-	// fmt.Printf("name: [%s, %s]\n", s.srcname, s.lvname)
-	//	return errors.New("can not find thin lv " + s.lvname)
 
-	//	return nil
 	if len(s.srcname) > 0 {
 		srclv, ok = root.FindThinLv(s.srcname)
 		if !ok {
@@ -83,53 +78,22 @@ func (s *streamSender) prepare() error {
 	// dump block mapping
 	tpoolDev := lvmutil.TPoolDevicePath(s.vgname, pool.Name)
 	tmetaDev := lvmutil.LvDevicePath(s.vgname, pool.MetaName)
-	//fmt.Println(tpoolDev, tmetaDev)
-	//fmt.Println(lv.DeviceId, srclv.DeviceId)
-	deltaResult, err := thindelta.Delta(tpoolDev, tmetaDev, lv.DeviceId, srclv.DeviceId)
+	deltaBlocks, count, err := thindelta.Delta(tpoolDev, tmetaDev, lv.DeviceId, srclv.DeviceId)
 	if err != nil {
-		fmt.Printf("thindump.Dump: %v\n", err)
+		fmt.Printf("thindump.Delta: %v\n", err)
 		return err
 	}
-	//fmt.Println(deltaResult)
 
-	// var dev, srcdev *thindump.Device
-
-	// dev, ok = superblk.FindDevice(lv.DeviceId)
-	// if !ok {
-	// 	return errors.New("super block do not have device " + string(lv.DeviceId))
-	// }
-
-	// if srclv != nil {
-	// 	srcdev, ok = superblk.FindDevice(srclv.DeviceId)
-	// 	if !ok {
-	// 		return errors.New("super block do not have device " + string(srclv.DeviceId))
-	// 	}
-	// }
-
-	// list all blocks for full backup, or find changed blocks by comparing block
-	// mappings for incremental backup.
-	//deltas, err := thindump.CompareDeviceBlocks(srcdev, dev)
-	deltas := thindelta.ExpandBlocks(deltaResult)
-
-	if err != nil {
-		return err
-	}
-	//fmt.Println(deltas)
-	//return errors.New("-.- ")
-	s.blocks = deltas
+	s.blocks = deltaBlocks
 	//	s.header.SchemeVersion = StreamSchemeV1
 	//	s.header.StreamType = StreamTypeFull
 	s.header.Name = lv.Name
 	s.header.VolumeSize = uint64(lv.ExtentCount) * uint64(root.ExtentSize())
 	s.header.BlockSize = uint32(pool.ChunkSize)
 	s.header.VolumeUUID = lv.UUID
-	s.header.BlockCount = uint64(len(s.blocks))
-
-	//	copy(s.header.VolumeUUID[:], []byte(lv.UUID))
-
+	s.header.BlockCount = uint64(count)
+	s.header.DetectLevel = s.detectLv
 	if srclv != nil {
-		//s.header.StreamType = StreamTypeDelta
-		//	copy(s.header.DeltaSourceUUID[:], []byte(srclv.UUID))
 		s.header.DeltaSourceUUID = srclv.UUID
 	}
 
@@ -144,7 +108,7 @@ func (s *streamSender) Run(header string) error {
 	}
 
 	if err := s.putHeader(header); err != nil {
-		fmt.Println(err.Error())
+		fmt.Fprintf(os.Stderr, err.Error())
 		return err
 	}
 
@@ -161,8 +125,23 @@ func (s *streamSender) Run(header string) error {
 	}
 	defer lvmutil.DeactivateLv(s.vgname, s.lvname)
 
-	devpath := lvmutil.LvDevicePath(s.vgname, s.lvname)
-	devFile, err := directio.OpenFile(devpath, os.O_RDONLY, 0644)
+	dstDevpath := lvmutil.LvDevicePath(s.vgname, s.lvname)
+	srcDevpath := lvmutil.LvDevicePath(s.vgname, s.srcname)
+	blockSize := int64(s.header.BlockSize)
+	hashBlocks, err := thindelta.GenChecksum(srcDevpath, blockSize, s.blocks, s.detectLv)
+
+	//fmt.Fprintln(os.Stderr, checksum)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, err.Error())
+		return err
+	}
+	if err := s.putBaseBlocks(hashBlocks); err != nil {
+		return nil
+		fmt.Fprintf(os.Stderr, err.Error())
+		return err
+	}
+
+	devFile, err := directio.OpenFile(dstDevpath, os.O_RDONLY, 0644)
 	if err != nil {
 		return err
 	}
@@ -170,10 +149,10 @@ func (s *streamSender) Run(header string) error {
 
 	buf := directio.AlignedBlock(int(s.header.BlockSize))
 
-	blockSize := int64(s.header.BlockSize) //chunk size: 64KB,65536
-	//fmt.Println(blockSize)
-	//return nil
 	for _, e := range s.blocks {
+		if e.OpType == thindelta.DeltaOpIgnore {
+			continue
+		}
 		if e.OpType == thindelta.DeltaOpDelete {
 			for i := 0; i < len(buf); i++ {
 				buf[i] = 0
@@ -202,17 +181,6 @@ func (s *streamSender) Run(header string) error {
 //func (s *streamSender) putHeader(header *streamHeader) error {
 func (s *streamSender) putHeader(header string) error {
 
-	// h, err := os.Open(header)
-	// if err != nil {
-	// 	return err
-	// }
-	// defer h.Close()
-	// buff, err := ioutil.ReadAll(h)
-	// //_, err = h.Read(buff)
-	// if err != nil {
-	// 	return err
-	// }
-	// f.Write(buff)
 	headBuf, err := yaml.Marshal(s.header)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "marshal head failed.\n")
@@ -224,13 +192,9 @@ func (s *streamSender) putHeader(header string) error {
 	return nil
 }
 
-// Wire Format of LVM Block in the stream:
-//   8 bytes: index; big endian
-//   N bytes: data
-//   M bytes: check sum of (index + data); currently always use MD5
 func (s *streamSender) putBlock(index int64, blockSize int64, buf []byte) error {
 
-	subHead := []byte(fmt.Sprintf("%X %X\n", index*(blockSize>>9), blockSize>>9))
+	subHead := []byte(fmt.Sprintf("W %X %X\n", index*(blockSize>>9), blockSize>>9))
 	if _, err := s.w.Write(subHead); err != nil {
 		return err
 	}
@@ -241,13 +205,20 @@ func (s *streamSender) putBlock(index int64, blockSize int64, buf []byte) error 
 	//f.Write([]byte{0x0a})
 	s.w.Write([]byte{0x0a})
 	s.h.Write(buf)
-	// s.h.Reset()
-	// s.h.Write(b[:])
-	// s.h.Write(buf)
+	return nil
+}
 
-	// if _, err := s.w.Write(s.h.Sum(nil)); err != nil {
-	// 	return err
-	// }
+func (s *streamSender) putBaseBlocks(blocks []thindelta.BlockHash) error {
+
+	for _, block := range blocks {
+		subHead := []byte(fmt.Sprintf("D %X %X %s %s\n", block.Offset, block.Length, block.HashType, block.Value))
+		if _, err := s.w.Write(subHead); err != nil {
+			return err
+		}
+	}
+	if len(blocks) > 0 {
+		s.w.Write([]byte{0x0a})
+	}
 
 	return nil
 }

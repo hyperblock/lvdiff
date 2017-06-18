@@ -11,6 +11,7 @@ import (
 
 func main() {
 	var rootCmd *cobra.Command
+	var flg bool
 	var vgname, poolname, lvname, input string
 
 	rootCmd = &cobra.Command{
@@ -29,7 +30,7 @@ func main() {
 				os.Exit(1)
 			}
 			defer f.Close()
-			recver, err := lvbackup.NewStreamRecver(vgname, poolname, lvname, f)
+			recver, err := lvbackup.NewStreamRecver(vgname, poolname, lvname, flg, f)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(2)
@@ -45,7 +46,7 @@ func main() {
 	}
 
 	rootCmd.Flags().StringVarP(&vgname, "lvgroup", "g", "", "volume group")
-	//rootCmd.Flags().StringVarP(&input, "input", "i", "", "input volume file")
+	rootCmd.Flags().BoolVarP(&flg, "no-base-check", "", false, "patch volume without check blocks' hash.")
 	rootCmd.Flags().StringVarP(&poolname, "pool", "p", "", "thin pool")
 	rootCmd.Flags().StringVarP(&lvname, "lv", "l", "", "logical volume")
 

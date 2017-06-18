@@ -23,9 +23,13 @@ type streamHeader struct {
 	BlockSize  uint32 `yaml:"Chunk size"`   // block size of logical volume
 	BlockCount uint64 `yaml:"Delta blocks"` // how many blocks in the stream
 	//VolumeUUID    [36]byte `yaml:"UUID"` // UUID of logical volume
-	VolumeUUID string `yaml:"VolumeUUID"`
+	VolumeUUID  string `yaml:"VolumeUUID"`
+	DetectLevel int    `yaml:"Detect level"`
+	//	DetectBlocks    string `yaml:"Detect address"`
+	//	BaseVolChecksum string `yaml:"Detect SHA1"`
 	//	DeltaSourceUUID [36]byte       // only for delta stream
 	DeltaSourceUUID string `yaml:"Backing volumeUUID"` // only for delta stream
+
 	//	CheckSum        [md5.Size]byte // MD5 hash of stream header except this field
 }
 
