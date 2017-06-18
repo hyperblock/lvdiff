@@ -7,7 +7,7 @@ import (
 
 	"strings"
 
-	"lvbackup"
+	"github.com/hyperblock/lvdiff/lvbackup"
 
 	"github.com/spf13/cobra"
 )

@@ -1,8 +1,9 @@
 package main
 
 import (
-	"lvbackup"
 	"os"
+
+	"github.com/hyperblock/lvdiff/lvbackup"
 
 	"fmt"
 

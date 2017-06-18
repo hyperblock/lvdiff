@@ -9,9 +9,9 @@ import (
 
 	yaml "gopkg.in/yaml.v2"
 
-	"lvbackup/lvmutil"
-	"lvbackup/thindelta"
-	"lvbackup/vgcfg"
+	"github.com/hyperblock/lvdiff/lvbackup/lvmutil"
+	"github.com/hyperblock/lvdiff/lvbackup/thindelta"
+	"github.com/hyperblock/lvdiff/lvbackup/vgcfg"
 
 	"fmt"
 

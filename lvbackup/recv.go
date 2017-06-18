@@ -9,9 +9,9 @@ import (
 	"os"
 	"strconv"
 
-	"lvbackup/lvmutil"
-	"lvbackup/thindelta"
-	"lvbackup/vgcfg"
+	"github.com/hyperblock/lvdiff/lvbackup/lvmutil"
+	"github.com/hyperblock/lvdiff/lvbackup/thindelta"
+	"github.com/hyperblock/lvdiff/lvbackup/vgcfg"
 
 	"github.com/ncw/directio"
 	yaml "gopkg.in/yaml.v2"
