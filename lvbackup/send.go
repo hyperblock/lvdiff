@@ -100,7 +100,7 @@ func (s *streamSender) prepare() error {
 	return nil
 }
 
-func (s *streamSender) Run(header string) error {
+func (s *streamSender) Run(header []byte) error {
 
 	if err := s.prepare(); err != nil {
 		fmt.Println(err.Error())
@@ -179,15 +179,17 @@ func (s *streamSender) Run(header string) error {
 }
 
 //func (s *streamSender) putHeader(header *streamHeader) error {
-func (s *streamSender) putHeader(header string) error {
+func (s *streamSender) putHeader(header []byte) error {
 
 	headBuf, err := yaml.Marshal(s.header)
+	//customHead, err := yaml.Marshal(header)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "marshal head failed.\n")
 		return err
 	}
 	s.w.Write([]byte(C_HEAD))
 	s.w.Write(headBuf)
+	s.w.Write(header)
 	s.w.Write([]byte{0x0a})
 	return nil
 }

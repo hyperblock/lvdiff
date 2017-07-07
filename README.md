@@ -2,11 +2,6 @@
 
 A pair of tools ( __lvdiff/lvpatch__ ) to backup and restore LVM2 thinly-provisioned volumes.
 
-## Compile
-
-    go build lvdiff.go
-    go build lvpatch.go
-
 ## Usage (__NEED RUN AS ROOT__)
 
 Create a thin snapshot:  
@@ -26,10 +21,9 @@ Flags:
 							 1 means only check head block, 
 							 2 means random check, 
 							 3 means scan all data blocks. (default 2)
-  -h, --help               help for lvdiff
-  -g, --lvgroup string     volume group.
-      --pair stringArray   set key-value pair (format as '$key:$value').
-  -p, --pool string        thin volume pool.
+  -h, --help       help for lvdiff
+      --pair	   set key-value pair (format as '$key:$value').
+  -p, --pool       thin volume pool.
 ```
 
 __eg.__  
@@ -43,7 +37,7 @@ For a volume group:
         
 run command:  
 
-   sudo ./lvdiff -g vg001 -p thin_pool0 --pair 'Author:BigVan (alpc_metic@live.com)' sp001 vol0 > sp001_vol0.diff
+   sudo ./lvdiff -g vg001 --pair 'Author:BigVan (alpc_metic@live.com)' --pair 'Message: hello world'sp001 vol0 > sp001_vol0.diff
 ```
    It will dump the different blocks between 'sp001' and 'vol0' and save as 'sp001\_vol0.diff'. And SHA1 code will be shown in Stderr.
 
