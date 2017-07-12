@@ -73,10 +73,13 @@ func (sr *streamRecver) prepare() error {
 	if err != nil {
 		return err
 	}
-
-	pool, ok := root.FindThinPool(sr.poolname)
+	baseLv, ok := root.FindThinLv(sr.lvname)
 	if !ok {
-		return errors.New("can not find thin pool " + sr.poolname)
+		return errors.New("can not find thin lv " + sr.lvname)
+	}
+	pool, ok := root.FindThinPool(baseLv.Pool)
+	if !ok {
+		return errors.New("can not find thin pool " + baseLv.Pool)
 	}
 
 	if pool.ChunkSize != int64(sr.header.BlockSize) {
@@ -84,12 +87,6 @@ func (sr *streamRecver) prepare() error {
 	}
 
 	if sr.disableCheck == false {
-
-		_, ok := root.FindThinLv(sr.lvname)
-
-		if !ok {
-			return errors.New("can not find thin lv " + sr.lvname)
-		}
 
 		devPath := lvmutil.LvDevicePath(sr.vgname, sr.lvname)
 		ok, err := thindelta.CheckBase(devPath, pool.ChunkSize, sr.baseBlocks)

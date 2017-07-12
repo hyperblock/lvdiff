@@ -47,14 +47,13 @@ lvpatch is a tool to patch volume's diff file (a set of volume's change blocks) 
 
 ```
 Usage:
-  lvpatch <input_diff_file> [flags]
+  lvpatch [flags]
 
 Flags:
   -h, --help             help for lvpatch
   -l, --lv string        logical volume
   -g, --lvgroup string   volume group
       --no-base-check    patch volume into base without calculate checksum.
-  -p, --pool string      thin pool
 ```
 
 __eg.__  
@@ -67,7 +66,7 @@ For a volume group:
 
 run command:
    
-    sudo ./lvpatch -g vg001 -p thin_pool0 -l vol0 sp001_vol0.diff
+    cat sp001_vol0.diff | sudo ./lvpatch -g vg001 -l vol0
 ``` 
    It will restore thin snapshot volume /dev/vg001/sp001
   
