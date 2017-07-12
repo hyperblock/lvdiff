@@ -13,25 +13,26 @@ import (
 func main() {
 	var rootCmd *cobra.Command
 	var flg bool
-	var vgname, poolname, lvname, input string
+	var vgname, poolname, lvname string
 
 	rootCmd = &cobra.Command{
-		Use:   "lvpatch <input_diff_file>",
+		Use:   "lvpatch",
 		Short: "create or update thin logcial volume with contents in standard input",
 		Run: func(cmd *cobra.Command, args []string) {
-			if len(vgname) == 0 || len(poolname) == 0 || len(lvname) == 0 || len(args) == 0 {
+			if len(vgname) == 0 || len(poolname) == 0 || len(lvname) == 0 {
 				fmt.Fprintln(os.Stderr, "volume group, thin pool and logical volume must be provided")
 				cmd.Usage()
 				os.Exit(-1)
 			}
-			input = args[0]
-			f, err := os.Open(input)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				os.Exit(1)
-			}
-			defer f.Close()
-			recver, err := lvbackup.NewStreamRecver(vgname, poolname, lvname, flg, f)
+			// input = args[0]
+			// f, err := os.Open(input)
+			// if err != nil {
+			// 	fmt.Fprintln(os.Stderr, err)
+			// 	os.Exit(1)
+			// }
+			// f := os.Stdin
+			// defer f.Close()
+			recver, err := lvbackup.NewStreamRecver(vgname, poolname, lvname, flg, os.Stdin)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(2)
