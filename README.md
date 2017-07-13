@@ -78,7 +78,7 @@ $ lvdiff -g vg0 --pair 'Author:BigVan (alpc_metic@live.com)' --pair 'Message: he
 ```
 lvdiff will dump the different blocks between __vol0__ and __sp0__ and saved as __test.diff__. And SHA1 code will be shown in Stderr.
 
-##lvpatch
+## lvpatch
 In this  section, we will patch __test.diff__ to an base volume which is identical with __vg0/sp0__ .
 1. Create a device
 ```
@@ -98,6 +98,6 @@ $ cat test.diff | sudo ./lvpatch -g vg1 -l sp0
 ``` 
   It will restore thin snapshot volume /dev/vg1/vol0
   
-##NOTE
+## NOTE
 Use command __lvs__ to check current volumes in your computer. If an volume is inactive, use command __lvchange -ay -K [volume path]__ to active it before mount.
 
