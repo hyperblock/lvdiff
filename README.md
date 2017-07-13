@@ -44,7 +44,7 @@ Flags:
 
 Please note that the chunk size of thin pool for restoring must be equal to that in the backup files.
 
-#Example
+# Example
 
 ## lvdiff 
 In this section, we  will use __lvdiff__ to create an diff-block file of thin volume.
