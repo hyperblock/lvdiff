@@ -102,7 +102,7 @@ func ActivateLv(vgname, lvname string) error {
 	if err != nil {
 		return err
 	}
-
+	//	fmt.Printf("active %s %s\n", vgname, lvname)
 	cmd := exec.Command(path, "-ay", "-K", fmt.Sprintf("%s/%s", vgname, lvname))
 	cmd.Stderr = os.Stderr
 	return myRunCmd(cmd)
@@ -113,7 +113,7 @@ func DeactivateLv(vgname, lvname string) error {
 	if err != nil {
 		return err
 	}
-
+	//	fmt.Printf("deactive %s %s\n", vgname, lvname)
 	cmd := exec.Command(path, "-an", fmt.Sprintf("%s/%s", vgname, lvname))
 	cmd.Stderr = os.Stderr
 	return myRunCmd(cmd)

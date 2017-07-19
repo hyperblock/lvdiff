@@ -22,17 +22,17 @@ func main() {
 	var rootCmd *cobra.Command
 	//var pool string
 	//	var head string
-	var strPair []string
+	var metaPairs []string
 	//	var value []string
 	var vgname string
-	var vol, backingVol string
+	var vol0, vol1 string
 	var depth int32
 	//var output string
 	//	header := c_HEADER
 
 	rootCmd = &cobra.Command{
-		Use:   "lvdiff <volume> <backing-volume>",
-		Short: "lvdiff is a tool to backup LVM2 thinly-provisioned volumes, will dump the thin volume $volume's incremental block from $backing-volume",
+		Use:   "lvdiff <volume_A> <volume_B>",
+		Short: "lvdiff is a tool to backup LVM2 thinly-provisioned volumes, will dump the thin volume $volume_A's incremental block from $volume_B",
 		Run: func(cmd *cobra.Command, args []string) {
 			if vgname == "" || len(args) < 2 {
 				fmt.Fprintf(os.Stderr, "Too few arguments.")
@@ -46,7 +46,7 @@ func main() {
 			}
 			//pair := []Pair{}
 			header := []byte{}
-			for _, obj := range strPair {
+			for _, obj := range metaPairs {
 				token := strings.Split(obj, ":")
 				if len(token) != 2 {
 					fmt.Fprintf(os.Stderr, "Invalid key-value pair: %s\n", obj)
@@ -61,10 +61,10 @@ func main() {
 				header = append(header, []byte(buf)...)
 			}
 
-			vol, backingVol = args[0], args[1]
+			vol1, vol0 = args[0], args[1]
 			f := os.Stdout
 
-			sender, err := lvbackup.NewStreamSender(vgname, vol, backingVol, f, int(depth))
+			sender, err := lvbackup.NewStreamSender(vgname, vol1, vol0, f, int(depth))
 
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -83,9 +83,8 @@ func main() {
 														1 means only check head block, 
 														2 means random check, 
 														3 means scan all data blocks.`)
-	//	rootCmd.Flags().StringVarP(&vol, "vol", "v", "", "thin volume name.")
-	//	rootCmd.Flags().StringVarP(&backingVol, "backing-volume", "b", "", "thin volume name.")
-	rootCmd.Flags().StringArrayVarP(&strPair, "pair", "", nil, "set key-value pair (format as '$key:$value').")
+													
+	rootCmd.Flags().StringArrayVarP(&metaPairs, "meta", "", nil, "set metadata (format as '$key:$value').")
 	//rootCmd.Flags().StringArrayVarP(&value, "value", "", nil, "set value.")
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(-1)

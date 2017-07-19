@@ -6,11 +6,11 @@ A pair of tools ( __lvdiff/lvpatch__ ) to backup and restore LVM2 thinly-provisi
 ## Usage (__NEED RUN AS ROOT__)
 
 ### lvdiff
-lvdiff is a tool to backup LVM2 thinly-provisioned volumes, will dump the thin volume $volume's incremental block from $backing-volume  
+lvdiff is a tool to backup LVM2 thinly-provisioned volumes, will dump the thin volume $volume\_A's incremental blocks from $volume\_B
 
 ```
 Usage:
-  lvdiff <volume> <backing-volume> [flags]
+  lvdiff <volume_A> <volume_B> [flags]
 
 Flags:
   -d, -- int32             checksum detect level. range: 0-3 
@@ -19,7 +19,9 @@ Flags:
 							 2 means random check, 
 							 3 means scan all data blocks. (default 2)
   -h, --help       help for lvdiff
-      --pair	   set key-value pair (format as '$key:$value').
+      --meta	   set metadata (format as '$key:$value').
+ 	           to set one more meta, use --meta aa:aa --meta bb:bb
+
   -p, --pool       thin volume pool.
 ```
 

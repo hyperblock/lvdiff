@@ -123,7 +123,7 @@ func (s *streamSender) Run(header []byte) error {
 	if err := lvmutil.ActivateLv(s.vgname, s.lvname); err != nil {
 		return err
 	}
-	defer lvmutil.DeactivateLv(s.vgname, s.lvname)
+	//	defer lvmutil.DeactivateLv(s.vgname, s.lvname)
 
 	dstDevpath := lvmutil.LvDevicePath(s.vgname, s.lvname)
 	srcDevpath := lvmutil.LvDevicePath(s.vgname, s.srcname)

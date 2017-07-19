@@ -173,10 +173,11 @@ func (sr *streamRecver) readBaseBlocks(bfRd *bufio.Reader) error {
 	return nil
 }
 
-func (sr *streamRecver) recvDiffStream() error {
+func (sr *streamRecver) recvDiffStream(newLv string) error {
 
 	bfRd := bufio.NewReader(sr.r)
 	sr.readHeader(bfRd)
+	sr.header.Name = newLv
 	sr.readBaseBlocks(bfRd)
 
 	if err := sr.prepare(); err != nil {
@@ -188,8 +189,8 @@ func (sr *streamRecver) recvDiffStream() error {
 		return err
 	}
 	//return nil
-	defer lvmutil.DeactivateLv(sr.vgname, sr.lvname)
-
+	//defer lvmutil.DeactivateLv(sr.vgname, sr.lvname)
+	//defer lvmutil.ActivateLv(sr.vgname, sr.header.Name)
 	devpath := lvmutil.LvDevicePath(sr.vgname, sr.lvname)
 
 	devFile, err := directio.OpenFile(devpath, os.O_WRONLY, 0644)
@@ -201,6 +202,7 @@ func (sr *streamRecver) recvDiffStream() error {
 	total := int64(sr.header.BlockCount)
 	dwWritten := int64(0)
 	//	fmt.Println(total)
+	fmt.Println("start patching...")
 	for {
 
 		line, err := bfRd.ReadBytes('\n')
@@ -256,11 +258,11 @@ func (sr *streamRecver) recvDiffStream() error {
 	return nil
 }
 
-func (sr *streamRecver) Run() error {
+func (sr *streamRecver) Run(newLv string) error {
 	var err error
 	//bfRd := bufio.NewReader(sr.r)
 	//for {
-	err = sr.recvDiffStream()
+	err = sr.recvDiffStream(newLv)
 
 	if err == io.EOF {
 		fmt.Println("\nDone.")
