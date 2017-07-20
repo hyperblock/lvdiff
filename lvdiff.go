@@ -32,7 +32,7 @@ func main() {
 
 	rootCmd = &cobra.Command{
 		Use:   "lvdiff <volume_A> <volume_B>",
-		Short: "lvdiff is a tool to backup LVM2 thinly-provisioned volumes, will dump the thin volume $volume_A's incremental block from $volume_B",
+		Short: "lvdiff is a tool to dump differential blocks of two thin volumes.",
 		Run: func(cmd *cobra.Command, args []string) {
 			if vgname == "" || len(args) < 2 {
 				fmt.Fprintf(os.Stderr, "Too few arguments.")
@@ -83,7 +83,7 @@ func main() {
 														1 means only check head block, 
 														2 means random check, 
 														3 means scan all data blocks.`)
-													
+
 	rootCmd.Flags().StringArrayVarP(&metaPairs, "meta", "", nil, "set metadata (format as '$key:$value').")
 	//rootCmd.Flags().StringArrayVarP(&value, "value", "", nil, "set value.")
 	if err := rootCmd.Execute(); err != nil {
