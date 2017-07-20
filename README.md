@@ -122,7 +122,7 @@ Flags:
 
 ## lvdiff 
 这一部分为使用 __lvdiff__ 的示例。
-假设在逻辑卷组 __'vg0'__ 中有精简配置池__'pool0'__
+假设在逻辑卷组 __'vg0'__ 中有精简配置池 __'pool0'__
 
 1. 建立 vol0 的快照 sp0
 ```
@@ -141,7 +141,7 @@ $ lvdiff -g vg0 --meta 'Author:BigVan (alpc_metic@live.com)' --meta 'Message: he
 vol0 和 sp0 之间的差异数据将被保存为 test.diff . 同时，该文件的 SHA1 结果将被输出至 Stderr.
 
 ## lvpatch
-这一部分将把 test.diff 拼接到与上一节中__vg0/sp0__一致的另一逻辑卷 __'vg1/sp0'__ 上，实现 vg0/vol0 的异地恢复。
+这一部分将把 test.diff 拼接到与上一节中 __vg0/sp0__ 一致的另一逻辑卷 __'vg1/sp0'__ 上，实现 vg0/vol0 的异地恢复。
 3. 将 test.diff 拼凑到 sp0 之上
 ```
 $ cat test.diff | sudo ./lvpatch -g vg1 -l sp0 vol0_new
@@ -149,5 +149,5 @@ $ cat test.diff | sudo ./lvpatch -g vg1 -l sp0 vol0_new
  新卷的名字为 __vg1/vol0_new__.
   
 ## 注意
-使用命令 __lvs__ 用于列出当前机器上存在的逻辑卷. 如果某一逻辑卷在挂在前未激活, 需要通过__lvchange -ay -K [volume path]__ 命令去激活该卷。d" > /mnt/vg0/vol0/hello
+使用命令 __lvs__ 用于列出当前机器上存在的逻辑卷. 如果某一逻辑卷在挂在前未激活, 需要通过 __lvchange -ay -K [volume path]__ 命令去激活该卷。
 
