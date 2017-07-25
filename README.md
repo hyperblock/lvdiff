@@ -6,7 +6,7 @@ A pair of tools ( __lvdiff/lvpatch__ ) to backup and restore LVM2 thinly-provisi
 ## Usage (__NEED RUN AS ROOT__)
 
 ### lvdiff
-lvdiff is a tool to dump the _LVM2 thinly-provisioned_ volume __$volume\_A__'s incremental blocks from __$volume\_B__
+lvdiff is a tool to dump the differential blocks of two __LVM2 thinly-provisioned volumes__.
 
 ```
 Usage:
