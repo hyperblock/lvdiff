@@ -1,4 +1,5 @@
-# lvdiff Project
+# lvdiff Project 
+_https://github.com/hyperblock/lvdiff_
 
 A pair of tools ( __lvdiff/lvpatch__ ) to backup and restore LVM2 thinly-provisioned volumes.
 
@@ -7,6 +8,8 @@ A pair of tools ( __lvdiff/lvpatch__ ) to backup and restore LVM2 thinly-provisi
 
 ### lvdiff
 lvdiff is a tool to dump the differential blocks of two __LVM2 thinly-provisioned volumes__.
+
+The format of dump file is called __HyperLayer__. ( http://www.hyperblock.org/2017/06/16/hyperlayer/ )
 
 ```
 Usage:
@@ -22,7 +25,6 @@ Flags:
       --meta       set metadata (format as '$key:$value').
  	           To set one more meta, use --meta aa:aa --meta bb:bb
 
-  -p, --pool       thin volume pool.
 ```
 
 
@@ -40,7 +42,6 @@ Flags:
       --no-base-check       patch volume into base without calculate checksum.
 ```
 
-Please note that the chunk size of thin pool for restoring must be equal to that in the backup files.
 
 # Example
 
@@ -78,9 +79,11 @@ $ cat test.diff | sudo ./lvpatch -g vg1 -l sp0 vol0_new
 Use command __lvs__ to check current volumes in your computer. If an volume is inactive, use command __lvchange -ay -K [volume path]__ to active it before mount.
 
 # lvdiff
+_https://github.com/hyperblock/lvdiff_
 
 __lvdiff/lvpatch__ 是一组用于对LVM自动精简配置(Thin Provisioning)的逻辑卷进行差异比较和补丁的工具。使用 __lvdiff__ 可以将两个逻辑卷的差异数据块形成二进制文件导出,再通过 __lvpatch__ 可将差异文件拼凑至另外的逻辑卷之上，实现逻辑卷的迁移。
 
+通过lvdiff导出的文件格式称作 __HyperLayer__ ( http://www.hyperblock.org/2017/06/16/hyperlayer/ )
 
 ## Usage (__NEED RUN AS ROOT__)
 
@@ -100,7 +103,6 @@ Flags:
       --meta       set metadata (format as '$key:$value').
  	           To set one more meta, use --meta aa:aa --meta bb:bb
 
-  -p, --pool       thin volume pool.
 ```
 ### lvpatch
 __lvpatch__ 用于将lvdiff导出的结果拼凑到另一个 __逻辑卷base__ 之上并形成新卷。当 __逻辑卷base__ 与 __原逻辑卷B__ 的数据一致时，可实现逻辑卷A的异地恢复。
@@ -115,8 +117,6 @@ Flags:
   -g, --lvgroup string      volume group
       --no-base-check       patch volume into base without calculate checksum.
 ```
-
-请注意，不同逻辑卷所在的精简池的chunk size需要相同才能进行正常恢复。
 
 # Example
 
